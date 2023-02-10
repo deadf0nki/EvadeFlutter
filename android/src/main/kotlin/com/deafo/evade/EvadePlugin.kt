@@ -32,7 +32,6 @@ class EvadePlugin : FlutterPlugin, MethodCallHandler {
         if (call.method == "evade") {
             this.context.runCatching {
                 var requiresNetwork = call.argument<Boolean>("requiresNetwork")
-                if (requiresNetwork != null) {
                     GlobalScope.launch {
                         context.evade(requiresNetwork) {
                             result.success(true)
@@ -40,7 +39,7 @@ class EvadePlugin : FlutterPlugin, MethodCallHandler {
                             result.success(false)
                         }
                     }
-                }
+                
             }
 
         }

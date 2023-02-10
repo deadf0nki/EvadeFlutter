@@ -11,8 +11,8 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
+import com.scottyab.rootbeer.RootBeer
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -24,45 +24,38 @@ import javax.net.SocketFactory
 
 
 @ExperimentalStdlibApi
-suspend inline fun Context.evade(
-    requiresNetwork: Boolean = true,
-    crossinline payload: suspend () -> Unit
-): OnEvade.Escape? {
-    return withContext(Dispatchers.Default) {
+inline suspend fun Context.evade(requiresNetwork: Boolean = true, crossinline payload: suspend () -> Unit): OnEvade.Escape{
+    return withContext(Dispatchers.Default){
         val isEmulator = async { isEmulator }
+        val isRooted = async { isRooted() }
         val hasAdbOverWifi = async { hasAdbOverWifi() }
         val isConnected = async { isConnected() }
         val hasUsbDevices = async { hasUsbDevices() }
         var hasFirewall: Deferred<Boolean>? = null
         var hasVpn: Deferred<Boolean>? = null
-        if (requiresNetwork) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+        if(requiresNetwork){
+            if(Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
                 hasFirewall = async { hasFirewall() }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
                 hasVpn = async { hasVPN() }
         }
-        val evaded = (!isEmulator.await() && !hasAdbOverWifi.await() && !(hasFirewall?.await() ?: false))
-        if (evaded) {
-            payload()
-            return@withContext null
-        } else {
-            return@withContext OnEvade.Escape(evaded)
-        }
+        val evaded =  !(!isEmulator.await() && !isRooted.await() && !hasAdbOverWifi.await() && !isConnected.await() && !hasUsbDevices.await() && !(hasVpn?.await() ?: false) && !(hasFirewall?.await() ?: false))
+        if(!evaded) payload()
+        return@withContext OnEvade.Escape(evaded)
     }
 }
 
-class OnEvade {
-    class Success(val result: Boolean) : Result {
-        suspend fun onSuccess(callback: suspend () -> Unit): Escape {
-            if (!this.result)
+class OnEvade{
+    class Success(val result: Boolean): Result{
+        suspend fun onSuccess(callback: suspend () -> Unit): Escape{
+            if(!this.result)
                 callback()
             return Escape(this.result)
         }
     }
-
-    class Escape(val result: Boolean) : Result {
-        suspend fun onEscape(callback: suspend () -> Unit): Success {
-            if (this.result)
+    class Escape(val result: Boolean): Result{
+        suspend fun onEscape(callback: suspend () -> Unit): Success{
+            if(this.result)
                 callback()
             return Success(this.result)
         }
@@ -74,12 +67,11 @@ interface Result
 /*Checks whether this phone is connected to a usb device such as a computer. I do not know whether this works but I believe it won't hurt to check*/
 @RequiresApi(Build.VERSION_CODES.HONEYCOMB_MR1)
 @PublishedApi
-internal suspend fun Context.hasUsbDevices() = (
-        this.getSystemService(Context.USB_SERVICE) as UsbManager).deviceList.isNotEmpty()
+internal suspend fun Context.hasUsbDevices() = (this.getSystemService(Context.USB_SERVICE) as UsbManager).deviceList.isNotEmpty()
 
 /*Checks whether the app is running on a fake device*/
 @PublishedApi
-internal val isEmulator by lazy {
+internal val isEmulator  by lazy{
     (Build.DEVICE.contains("generic")
             || Build.FINGERPRINT.contains("generic")
             || Build.MODEL.contains("google_sdk")
@@ -105,25 +97,19 @@ internal val isEmulator by lazy {
 @PublishedApi
 internal suspend fun Context.hasFirewall(): Boolean {
     lateinit var packages: List<PackageInfo>
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
-        packages =
-            this.packageManager.getInstalledPackages(PackageManager.MATCH_UNINSTALLED_PACKAGES)
+    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+        packages = this.packageManager.getInstalledPackages(PackageManager.MATCH_UNINSTALLED_PACKAGES)
     else
         packages = this.packageManager.getInstalledPackages(PackageManager.GET_UNINSTALLED_PACKAGES)
     packages.forEach { app ->
-        val name = app.packageName.lowercase(Locale.getDefault())
+        val name = app.packageName.toLowerCase()
         if (name.contains("firewall") || name.contains("adb")
             || name.contains("port scanner") || name.contains("network scanner")
             || name.contains("network analysis") || name.contains("ip tools")
             || name.contains("net scan") || name.contains("network analyzer")
             || name.contains("packet capture") || name.contains("pcap") || name.contains("wicap")
-            || name.contains("netcapture") || name.contains("sniffer") || name.contains("vnet") || name.contains(
-                "network log"
-            ) ||
-            name.contains("network monitor") || name.contains("network tools") || name.contains("network utilities") || name.contains(
-                "network utility"
-            )
-        )
+            || name.contains("netcapture") || name.contains("sniffer") || name.contains("vnet") || name.contains("network log") ||
+                name.contains("network monitor") || name.contains("network tools") || name.contains("network utilities") || name.contains("network utility"))
             return true
     }
     return false
@@ -131,10 +117,10 @@ internal suspend fun Context.hasFirewall(): Boolean {
 
 /*Checks whether the device is listening to port 5555. This port is used to connect to a computer through wifi on a local network for ADB debugging*/
 @PublishedApi
-internal suspend fun Context.hasAdbOverWifi(): Boolean {
+internal suspend fun Context.hasAdbOverWifi(): Boolean{
     var isOpen = false
     val mgr = this.getSystemService(Context.WIFI_SERVICE) as WifiManager
-    if (!mgr.isWifiEnabled)
+    if(!mgr.isWifiEnabled)
         return isOpen
     val wifiAddress = this.applicationContext.getWifiIpAddress(mgr)
     runCatching {
@@ -147,28 +133,31 @@ internal suspend fun Context.hasAdbOverWifi(): Boolean {
 /*checks whether the network is running through a VPN*/
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 @PublishedApi
-internal suspend fun Context.hasVPN(): Boolean {
+internal suspend fun Context.hasVPN(): Boolean{
     val mgr = this.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     mgr.allNetworks.forEach { network ->
         val capabilities = mgr.getNetworkCapabilities(network)
-        if (capabilities!!.hasTransport(NetworkCapabilities.TRANSPORT_VPN))
+        if(capabilities!!.hasTransport(NetworkCapabilities.TRANSPORT_VPN))
             return true
     }
     return false
 }
 
+/*checks whether the device has super user powers SU*/
+@PublishedApi
+internal suspend fun Context.isRooted() = RootBeer(this).apply { setLogging(false) }.isRooted
 
 /*checks whether there is a usb cord plugged into the phone*/
 @PublishedApi
 internal suspend fun Context.isConnected(): Boolean {
     val intent = this.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     val plugged = intent!!.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1)
+    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1)
         return plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS
     return plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB
 }
 
-private suspend fun Context.getWifiIpAddress(wifiManager: WifiManager): String? {
+private suspend fun Context.getWifiIpAddress(wifiManager: WifiManager): String?{
     val intRepresentation = wifiManager.dhcpInfo.ipAddress
     val addr = intToInetAddress(intRepresentation)
     return addr?.hostAddress
